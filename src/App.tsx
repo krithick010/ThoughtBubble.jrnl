@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { ThoughtBubble } from './types';
+import { ThoughtBubble, Mood } from './types';
 import { initialBubbles } from './data/initialBubbles';
 import BubbleList from './components/BubbleList';
 import NewBubblePage from './components/NewBubblePage';
+import EditBubblePage from './components/EditBubblePage';
 
 function App() {
   // Use localStorage to persist bubbles between page reloads
@@ -16,7 +17,6 @@ function App() {
   // Save bubbles to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('thoughtBubbles', JSON.stringify(bubbles));
-    console.log("Saved bubbles to localStorage:", bubbles.length);
   }, [bubbles]);
 
   const handleNewBubble = (bubbleData: Omit<ThoughtBubble, 'id' | 'timestamp'>) => {
@@ -26,8 +26,7 @@ function App() {
       timestamp: Date.now(),
     };
     
-    const updatedBubbles = [newBubble, ...bubbles];
-    setBubbles(updatedBubbles);
+    setBubbles([newBubble, ...bubbles]);
   };
 
   // Function to delete a bubble
@@ -42,6 +41,14 @@ function App() {
     );
     setBubbles(updatedBubbles);
   };
+  
+  // Function to edit a bubble with content and mood
+  const handleSaveBubble = (id: string, content: string, mood: Mood) => {
+    const updatedBubbles = bubbles.map(bubble => 
+      bubble.id === id ? { ...bubble, content, mood } : bubble
+    );
+    setBubbles(updatedBubbles);
+  };
 
   return (
     <Router>
@@ -50,7 +57,7 @@ function App() {
           path="/"
           element={
             <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 overflow-hidden">
-              {/* Fixed header with transparent background */}
+              {/* Header */}
               <header className="fixed w-full bg-white bg-opacity-90 shadow-sm z-10">
                 <div className="w-full px-6 py-4 flex justify-between items-center">
                   <div className="flex items-center">
@@ -69,19 +76,27 @@ function App() {
                 </div>
               </header>
               
-              {/* Full-width and full-height main content with padding-top to account for fixed header */}
               <main className="w-full pt-16">
                 <BubbleList 
-                  key={`bubbles-${bubbles.length}`} 
                   bubbles={bubbles} 
                   onDelete={handleDeleteBubble} 
-                  onEdit={handleEditBubble}
+                  onEdit={handleEditBubble} 
                 />
               </main>
             </div>
           }
         />
         <Route path="/new" element={<NewBubblePage onSubmit={handleNewBubble} />} />
+        <Route 
+          path="/edit/:id" 
+          element={
+            <EditBubblePage 
+              onSave={handleSaveBubble} 
+              onDelete={handleDeleteBubble}
+              bubbles={bubbles}
+            />
+          } 
+        />
       </Routes>
     </Router>
   );

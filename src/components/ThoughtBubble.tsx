@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ThoughtBubble as ThoughtBubbleType, MOOD_COLORS } from '../types';
 import { Trash2, Maximize2, Minimize2, Edit2, Check } from 'lucide-react';
 
@@ -17,6 +18,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
   const [showControls, setShowControls] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(bubble.content);
+  const navigate = useNavigate();
 
   // Prevent click events from bubbling up when clicking buttons
   const handleButtonClick = (e: React.MouseEvent, callback: () => void) => {
@@ -32,15 +34,17 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
     }
   };
 
-  // Handle editing
+  // Navigate to edit page when edit button is clicked
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsExpanded(true); // Expand to see full content
-    setIsEditing(true); // Enter edit mode
-    setShowControls(false); // Hide controls while editing
+    navigate(`/edit/${bubble.id}`, { 
+      state: { 
+        bubble: bubble 
+      }
+    });
   };
 
-  // Handle save after editing
+  // Handle save after editing (for in-place editing fallback)
   const handleSave = (e: React.MouseEvent) => {
     e.stopPropagation();
     onEdit(bubble.id, editedContent);
@@ -120,7 +124,7 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
               }
             </button>
             
-            {/* Edit button */}
+            {/* Edit button - Now navigates to edit page */}
             <button
               onClick={handleEdit}
               className="bg-white p-2 rounded-full shadow-lg hover:bg-blue-100 transition-colors"
