@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes roam {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(20vw, 10vh);
+  }
+  50% {
+    transform: translate(-15vw, -20vh);
+  }
+  75% {
+    transform: translate(10vw, -10vh);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.animate-roam {
+  animation: roam 10s infinite alternate ease-in-out;
+}
+
+@keyframes fly {
+  0% {
+    transform: translate(0, 0);
+  }
+  25% {
+    transform: translate(30vw, -20vh);
+  }
+  50% {
+    transform: translate(-25vw, 30vh);
+  }
+  75% {
+    transform: translate(20vw, -10vh);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.animate-fly {
+  animation: fly 15s infinite ease-in-out;
+}
