@@ -26,15 +26,22 @@ function App() {
       timestamp: Date.now(),
     };
     
-    // Explicitly create a new array to ensure React detects the state change
     const updatedBubbles = [newBubble, ...bubbles];
-    console.log("Adding new bubble. Total bubbles:", updatedBubbles.length);
-    
     setBubbles(updatedBubbles);
   };
 
-  // Debug - log current bubbles count
-  console.log("Current bubbles in App:", bubbles.length);
+  // Function to delete a bubble
+  const handleDeleteBubble = (id: string) => {
+    setBubbles(bubbles.filter(bubble => bubble.id !== id));
+  };
+
+  // Function to edit a bubble
+  const handleEditBubble = (id: string, newContent: string) => {
+    const updatedBubbles = bubbles.map(bubble => 
+      bubble.id === id ? { ...bubble, content: newContent } : bubble
+    );
+    setBubbles(updatedBubbles);
+  };
 
   return (
     <Router>
@@ -64,7 +71,12 @@ function App() {
               
               {/* Full-width and full-height main content with padding-top to account for fixed header */}
               <main className="w-full pt-16">
-                <BubbleList key={`bubbles-${bubbles.length}`} bubbles={bubbles} />
+                <BubbleList 
+                  key={`bubbles-${bubbles.length}`} 
+                  bubbles={bubbles} 
+                  onDelete={handleDeleteBubble} 
+                  onEdit={handleEditBubble}
+                />
               </main>
             </div>
           }

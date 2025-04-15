@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mood, ThoughtBubble } from '../types';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { Sparkles } from 'lucide-react';
 
 const MOODS: Mood[] = ['Happy', 'Sad', 'Angry', 'Creative', 'Calm'];
 
@@ -15,7 +16,25 @@ const NewBubblePage: React.FC<NewBubblePageProps> = ({ onSubmit }) => {
   const [title, setTitle] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState('');
+  const [inlineSuggestion, setInlineSuggestion] = useState('');
+  const [typingTimeout, setTypingTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [cursorPosition, setCursorPosition] = useState<number | null>(null);
+  const [showInlineHelp, setShowInlineHelp] = useState(false);
+  
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const navigate = useNavigate();
+  
+  // Show inline help message when a suggestion is available
+  useEffect(() => {
+    if (inlineSuggestion) {
+      setShowInlineHelp(true);
+      const timer = setTimeout(() => {
+        setShowInlineHelp(false);
+      }, 5000); // Hide after 5 seconds
+      
+      return () => clearTimeout(timer);
+    }
+  }, [inlineSuggestion]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,6 +46,135 @@ const NewBubblePage: React.FC<NewBubblePageProps> = ({ onSubmit }) => {
     navigate('/');
   };
 
+  // Generate inline suggestions as user types
+  useEffect(() => {
+    if (content.length < 15) {
+      setInlineSuggestion('');
+      return;
+    }
+
+    // Clear previous timeout
+    if (typingTimeout) clearTimeout(typingTimeout);
+
+    // Set new timeout to avoid generating suggestions on every keystroke
+    const timeout = setTimeout(() => {
+      generateInlineSuggestion();
+    }, 1000);
+
+    setTypingTimeout(timeout);
+
+    return () => {
+      if (typingTimeout) clearTimeout(typingTimeout);
+    };
+  }, [content, selectedMood]);
+
+  // Function to generate inline suggestion using Gemini API
+  const generateInlineSuggestion = async () => {
+    // Don't generate if content is too short or ends with punctuation
+    if (content.length < 15 || /[.!?]$/.test(content.trim())) {
+      setInlineSuggestion('');
+      return;
+    }
+
+    try {
+      // Get API key from environment variables
+      const apiKey = import.meta.env.VITE_GOOGLE_GENAI_API_KEY;
+      if (!apiKey) {
+        console.warn('API key is missing. Using mock suggestions instead.');
+        // Fall back to mock suggestions if API key is missing
+        const mockSuggestions = {
+          'Happy': [' and it fills me with so much joy!'],
+          'Sad': [' although I\'m trying to stay positive.'],
+          'Angry': [' and it\'s really frustrating to deal with.'],
+          'Creative': [' and I see so many possibilities ahead.'],
+          'Calm': [' and I feel at peace with everything.']
+        };
+        const suggestions = mockSuggestions[selectedMood] || mockSuggestions['Happy'];
+        setInlineSuggestion(suggestions[0]);
+        return;
+      }
+
+      // Initialize the Gemini API client
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      // Create a prompt for the AI - we want just a continuation, not a full response
+      const prompt = `Complete this sentence fragment in a ${selectedMood.toLowerCase()} tone. 
+      Be brief, conversational, and natural. Your completion should be 5-15 words maximum.
+      Provide ONLY the completion - no quotes, no prefixes.Also the content output should be in 1st person format, give the content in first person format.
+      
+      Sentence fragment: "${content}"
+      
+      Completion:`;
+      
+      // Generate content with a short response and quick timeout
+      const generationConfig = {
+        maxOutputTokens: 30,
+        temperature: 0.7,
+      };
+
+      // Add a timeout to avoid waiting too long for a suggestion
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Suggestion generation timed out')), 3000)
+      );
+
+      // Race the API call against the timeout
+      const resultPromise = model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig
+      });
+
+      const result = await Promise.race([resultPromise, timeoutPromise]);
+      
+      // Type guard to ensure we have the Gemini result
+      if (result && typeof result === 'object' && 'response' in result) {
+        const response = await result.response;
+        if (typeof response === 'object' && response !== null && 'text' in response && typeof response.text === 'function') {
+          const suggestion = response.text().trim();
+          
+          // Only use the suggestion if it's not too long and doesn't contain unwanted elements
+          if (suggestion && suggestion.length > 0 && suggestion.length < 100 && !suggestion.includes('"') && !suggestion.includes('completion:')) {
+            setInlineSuggestion(suggestion);
+            // Show tooltip hint
+            setShowInlineHelp(true);
+          } else {
+            setInlineSuggestion('');
+          }
+        } else {
+          console.warn('Unexpected response format:', response);
+          setInlineSuggestion('');
+        }
+      }
+    } catch (error) {
+      console.error('Error generating inline suggestion:', error);
+      setInlineSuggestion('');
+    }
+  };
+
+  // Accept inline suggestion on Tab or Shift+Enter
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.key === 'Enter' && e.shiftKey) || e.key === 'Tab') {
+      if (inlineSuggestion) {
+        e.preventDefault();
+        setContent(content + inlineSuggestion);
+        setInlineSuggestion('');
+        
+        // Focus back on textarea and place cursor at the end
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          const length = content.length + inlineSuggestion.length;
+          textareaRef.current.setSelectionRange(length, length);
+        }
+      }
+    }
+  };
+
+  // Track cursor position for better suggestion display
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+    setCursorPosition(e.target.selectionStart);
+  };
+
   const handleAiSuggestion = async () => {
     setIsLoading(true);
     try {
@@ -36,12 +184,12 @@ const NewBubblePage: React.FC<NewBubblePageProps> = ({ onSubmit }) => {
         throw new Error('API key is missing. Please set VITE_GOOGLE_GENAI_API_KEY in your .env file.');
       }
 
-      // Initialize the Gemini API client correctly
+      // Initialize the Gemini API client
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" }); // Updated model name
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
       // Create a prompt for the AI
-      const prompt = `Hey, I'm feeling ${selectedMood.toLowerCase()} today. Can you give me a few thoughts I might jot down in my journal about this mood? Nothing fancy - just casual, honest thoughts like someone would actually write in their personal journal. Keep it real and straightforward.`;
+      const prompt = `Hey, I'm feeling ${selectedMood.toLowerCase()} today. Can you give me a few thoughts I might jot down in my journal about this mood? Nothing fancy - just casual, honest thoughts like someone would actually write in their personal journal. Keep it real and straightforward. Dont give in points format, just give it in paragraphs format, Make sure the grammer is correct.Follow up after ${content} and give the content in first person format.Dont print the content the user wrote`;
       
       // Generate content
       const result = await model.generateContent(prompt);
@@ -69,7 +217,7 @@ const NewBubblePage: React.FC<NewBubblePageProps> = ({ onSubmit }) => {
       {/* Header */}
       <header className="bg-white shadow-md px-6 py-4 z-10">
         <div className="flex justify-between items-center max-w-full mx-auto">
-          <h1 className="text-2xl font-semibold text-gray-800">Create a New Post</h1>
+          <h1 className="text-2xl font-semibold text-gray-800">Create a New Bubble</h1>
           <div className="flex space-x-4">
             <button
               type="button"
@@ -95,45 +243,76 @@ const NewBubblePage: React.FC<NewBubblePageProps> = ({ onSubmit }) => {
         {/* Editor Section - Left side */}
         <div className="w-3/4 overflow-auto p-6">
           <form id="post-form" onSubmit={handleSubmit} className="h-full flex flex-col">
-            {/* Title and Mood Selection on the same line */}
-            <div className="flex flex-wrap items-center gap-4 mb-6">
-              {/* Title Input (takes up more space) */}
-              <div className="flex-grow">
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2 border rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg"
-                  placeholder="Enter title..."
-                  required
-                />
-              </div>
-              
-              {/* Mood Selector (compact version) */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-gray-700 whitespace-nowrap">Feeling:</span>
-                <select 
-                  value={selectedMood}
-                  onChange={(e) => setSelectedMood(e.target.value as Mood)}
-                  className="border rounded-lg px-3 py-2 bg-white text-sm shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                >
-                  {MOODS.map(mood => (
-                    <option key={mood} value={mood}>{mood}</option>
-                  ))}
-                </select>
+            {/* Mood Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">How are you feeling?</label>
+              <div className="flex flex-wrap gap-2">
+                {MOODS.map((mood) => (
+                  <button
+                    key={mood}
+                    type="button"
+                    onClick={() => setSelectedMood(mood)}
+                    className={`px-4 py-2 rounded-full text-sm font-medium transition-colors
+                      ${
+                        selectedMood === mood
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                  >
+                    {mood}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Content Input - Grows to fill available space */}
-            <div className="flex-grow flex flex-col mb-6">
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="w-full flex-grow px-4 py-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg resize-none"
-                style={{ minHeight: "300px" }}
-                placeholder="Write your thoughts here..."
-                required
-              />
+            {/* Content Input - Custom textarea with inline suggestions */}
+            <div className="flex-grow flex flex-col mb-6 relative">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex justify-between">
+                <span>What's on your mind?</span>
+                {showInlineHelp && inlineSuggestion && (
+                  <span className="text-xs text-purple-600 flex items-center">
+                    <Sparkles className="h-3 w-3 mr-1" /> 
+                    Press Tab or Shift+Enter to accept suggestion
+                  </span>
+                )}
+              </label>
+              
+              <div className="relative flex-grow">
+                {/* This is the main textarea where users type */}
+                <textarea
+                  ref={textareaRef}
+                  value={content}
+                  onChange={handleTextareaChange}
+                  onKeyDown={handleKeyDown}
+                  className="w-full h-full px-4 py-3 border rounded-lg shadow-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg resize-none"
+                  style={{ 
+                    minHeight: "300px",
+                    fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                  }}
+                  placeholder="Write your thoughts here..."
+                  required
+                />
+                
+                {/* This is the suggestion overlay */}
+                {inlineSuggestion && (
+                  <div 
+                    className="pointer-events-none absolute top-0 left-0 w-full h-full px-4 py-3 text-lg"
+                    style={{ 
+                      fontFamily: '"Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }}
+                  >
+                    <span className="invisible">{content}</span>
+                    <span className="text-gray-400">{inlineSuggestion}</span>
+                  </div>
+                )}
+                
+                {/* Small sparkle icon to indicate AI when suggestion is active */}
+                {inlineSuggestion && (
+                  <div className="absolute top-3 right-3">
+                    <Sparkles className="h-4 w-4 text-purple-400" />
+                  </div>
+                )}
+              </div>
             </div>
           </form>
         </div>

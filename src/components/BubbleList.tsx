@@ -4,9 +4,11 @@ import ThoughtBubble from './ThoughtBubble';
 
 interface BubbleListProps {
   bubbles: ThoughtBubbleType[];
+  onDelete: (id: string) => void;
+  onEdit: (id: string, content: string) => void;
 }
 
-const BubbleList: React.FC<BubbleListProps> = ({ bubbles }) => {
+const BubbleList: React.FC<BubbleListProps> = ({ bubbles, onDelete, onEdit }) => {
   // State for bubble positions
   const [positions, setPositions] = useState<Array<{x: number, y: number, size: number}>>([]);
   
@@ -118,7 +120,11 @@ const BubbleList: React.FC<BubbleListProps> = ({ bubbles }) => {
               zIndex: 1
             }}
           >
-            <ThoughtBubble bubble={bubble} />
+            <ThoughtBubble 
+              bubble={bubble} 
+              onDelete={onDelete} 
+              onEdit={onEdit}
+            />
           </div>
         );
       })}
