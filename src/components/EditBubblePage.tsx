@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ThoughtBubble, Mood, MOOD_COLORS } from '../types';
 import { SendHorizontal, ArrowLeft, Save, Sparkles, User, Bot } from 'lucide-react';
 
@@ -36,7 +35,7 @@ const EditBubblePage: React.FC<EditBubblePageProps> = ({ onSave, onDelete, bubbl
   const [isAiTyping, setIsAiTyping] = useState(false);
   const [apiRequestInProgress, setApiRequestInProgress] = useState(false);
 
-  // Function to get AI response - use useCallback to ensure stable reference
+  // Update the getAiResponse function to always use the API
   const getAiResponse = useCallback(async (userMessage: string, currentMood: Mood) => {
     // Don't proceed if there's already a request in progress
     if (apiRequestInProgress) {
@@ -48,40 +47,10 @@ const EditBubblePage: React.FC<EditBubblePageProps> = ({ onSave, onDelete, bubbl
     setApiRequestInProgress(true);
 
     try {
-      // Get API key from environment variables
-      const apiKey = import.meta.env.VITE_GOOGLE_GENAI_API_KEY;
-
-      if (!apiKey) {
-        // Use mock responses if API key is missing
-        setTimeout(() => {
-          const mockResponses = {
-            'Happy': "I'm glad you're feeling positive! What aspects of this experience bring you the most joy?",
-            'Sad': "I understand this is difficult. Would you like to talk more about what's troubling you?",
-            'Angry': "I can see you're frustrated. Taking a moment to breathe can help. Would you like to explore what triggered these feelings?",
-            'Creative': "That's a fascinating perspective! What inspired this creative thought?",
-            'Calm': "It sounds like you're in a good headspace. How did you achieve this sense of peace?"
-          };
-
-          const response = mockResponses[currentMood] || "Thank you for sharing your thoughts. How are you feeling about this right now?";
-
-          setChatMessages(prev => [...prev, {
-            role: 'assistant',
-            content: response,
-            timestamp: Date.now()
-          }]);
-
-          setIsAiTyping(false);
-          setApiRequestInProgress(false);
-        }, 1500);
-      } else {
-        console.log("Starting API request for:", userMessage);
-
-        // Initialize the Gemini API client with simplified approach
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        // Create a simple prompt without using chat history to avoid format issues
-        const prompt = `
+      console.log("Starting API request for:", userMessage);
+      
+      // Create the prompt
+      const prompt = `
         You are ThoughtBubble AI, a compassionate and thoughtful AI companion.
 
         The user has shared a thought with you. They're feeling ${currentMood.toLowerCase()}.
@@ -101,51 +70,54 @@ const EditBubblePage: React.FC<EditBubblePageProps> = ({ onSave, onDelete, bubbl
         3. Don't mention that typing "I am fine" will delete anything - just present it as a way to conclude the session.
         4. Don't mention that you're an AI or apologize for being one.
         5. Keep your responses concise (2-4 sentences).
-        `;
+      `;
 
-        // Generate content with simple parameters
-        const result = await model.generateContent(prompt);
-        const response = await result.response;
-        const text = response.text();
+      // Try to get URL for the API function (handles both Netlify and local dev)
+      // Use serverless function URL for both production and development
+      const apiUrl = '/.netlify/functions/gemini-proxy';
+      
+      console.log("Calling API endpoint:", apiUrl);
+      
+      // Call our serverless function
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt,
+          model: 'gemini-1.5-flash'
+        }),
+      });
 
-        console.log("API response received");
-
-        // Add AI response to chat
-        setChatMessages(prev => [...prev, {
-          role: 'assistant',
-          content: text,
-          timestamp: Date.now()
-        }]);
-
-        setIsAiTyping(false);
-        setApiRequestInProgress(false);
-      }
-    } catch (error) {
-      console.error('Error getting AI response:', error);
-
-      // More detailed logging
-      if (error instanceof Error) {
-        console.error('Error message:', error.message);
-        console.error('Error stack:', error.stack);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("API response not OK:", response.status, response.statusText, errorData);
+        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
       }
 
-      // Use mock responses as fallback on error
-      const fallbackResponses = [
-        "That's interesting. How long have you been feeling this way?",
-        "I understand. What do you think triggered these thoughts?",
-        "Thank you for sharing that with me. How does expressing this make you feel?",
-        "I'm curious to hear more about your experience. Would you like to elaborate?",
-        "That sounds meaningful to you. What aspects of this are most important?"
-      ];
+      const data = await response.json();
+      console.log("API response received successfully");
 
-      const randomResponse = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
-
+      // Add AI response to chat
       setChatMessages(prev => [...prev, {
         role: 'assistant',
-        content: randomResponse,
+        content: data.text,
         timestamp: Date.now()
       }]);
-
+      
+    } catch (error) {
+      console.error('Error in API call:', error);
+      
+      // Instead of falling back to mock responses, show an error message
+      setChatMessages(prev => [...prev, {
+        role: 'assistant',
+        content: "I'm having trouble connecting right now. Please try again in a moment.",
+        timestamp: Date.now()
+      }]);
+      
+      // Optional: You could also add a retry mechanism here
+    } finally {
       setIsAiTyping(false);
       setApiRequestInProgress(false);
     }
