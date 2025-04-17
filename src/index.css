@@ -45,3 +45,58 @@
 .animate-fly {
   animation: fly 15s infinite ease-in-out;
 }
+
+/* Add the missing keyframes for twinkle effect */
+@keyframes twinkle {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+
+/* Add shooting star animation */
+@keyframes shooting-star {
+  0% {
+    opacity: 0;
+    transform: translateX(0) translateY(0) rotate(-15deg) scale(0.5);
+  }
+  1% {
+    opacity: 1;
+    transform: translateX(0) translateY(0) rotate(-15deg) scale(1);
+  }
+  5% {
+    opacity: 0.8;
+    transform: translateX(100px) translateY(20px) rotate(-15deg) scale(1);
+  }
+  6% {
+    opacity: 0;
+    transform: translateX(150px) translateY(30px) rotate(-15deg) scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(150px) translateY(30px) rotate(-15deg) scale(0.5);
+  }
+}
+
+/* Add bubble float animation */
+@keyframes bubble-float {
+  0% {
+    transform: translateY(100vh) scale(1);
+  }
+  100% {
+    transform: translateY(-100vh) scale(0.5);
+  }
+}
+
+/* Add CSS variables for color gradients */
+:root {
+  --tw-yellow-100: #fef9c3;
+  --tw-blue-100: #dbeafe;
+  --tw-red-100: #fee2e2;
+  --tw-purple-100: #f3e8ff;
+  --tw-green-100: #dcfce7;
+}

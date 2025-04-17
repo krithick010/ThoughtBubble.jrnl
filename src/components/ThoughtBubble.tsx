@@ -7,18 +7,23 @@ interface ThoughtBubbleProps {
   bubble: ThoughtBubbleType;
   onDelete?: (id: string) => void;
   onEdit?: (id: string, content: string) => void;
+  is3D?: boolean;
 }
 
 const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({ 
   bubble, 
   onDelete = () => {}, 
-  onEdit = () => {} 
+  onEdit = () => {},
+  is3D = false
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(bubble.content);
   const navigate = useNavigate();
+
+  // Get color classes based on mood
+  const colorClass = MOOD_COLORS[bubble.mood];
 
   // Prevent click events from bubbling up when clicking buttons
   const handleButtonClick = (e: React.MouseEvent, callback: () => void) => {
@@ -56,15 +61,49 @@ const ThoughtBubble: React.FC<ThoughtBubbleProps> = ({
     e.stopPropagation();
   };
 
+  // Extract background color from Tailwind class
+  const getBgColorFromClass = (colorClass: string) => {
+    const bgClass = colorClass.split(' ')[0]; // Get "bg-color-100" part
+    const colorMatch = bgClass.match(/bg-(\w+)-(\d+)/);
+    if (colorMatch) {
+      const [_, colorName, intensity] = colorMatch;
+      return { colorName, intensity };
+    }
+    return { colorName: 'gray', intensity: '100' };
+  };
+
+  const { colorName, intensity } = getBgColorFromClass(colorClass);
+
   return (
     <div
-      className={`aspect-square rounded-full border-2 p-6 cursor-pointer transition-transform duration-300 
+      className={`aspect-square rounded-full border-2 p-6 cursor-pointer
         overflow-hidden flex flex-col items-center justify-center backdrop-blur-sm
-        ${MOOD_COLORS[bubble.mood]} 
-        ${isExpanded ? 'scale-105 shadow-lg' : 'hover:scale-110'} 
+        ${colorClass} 
+        ${isExpanded ? 'scale-105' : 'hover:scale-110'} 
         relative`}
       onClick={() => !isEditing && setShowControls(!showControls)}
+      style={{
+        boxShadow: is3D 
+          ? `inset 0 10px 20px rgba(255, 255, 255, 0.3), 
+             0 10px 30px rgba(0, 0, 0, 0.2),
+             0 2px 10px rgba(255, 255, 255, 0.2)` 
+          : undefined,
+        background: is3D 
+          ? `linear-gradient(145deg, var(--tw-${colorName}-${intensity}), rgba(255, 255, 255, 0.8))` 
+          : undefined,
+        transition: 'all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+      }}
     >
+      {/* Create glass reflection effect for 3D */}
+      {is3D && (
+        <div 
+          className="absolute inset-0 rounded-full opacity-40 pointer-events-none"
+          style={{
+            background: 'linear-gradient(135deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 50%)',
+          }}
+        />
+      )}
+
       {/* Content */}
       {isExpanded ? (
         <>
